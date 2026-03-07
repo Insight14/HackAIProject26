@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable, Tuple
 
 
@@ -35,6 +36,17 @@ _SEVERITY_WEIGHTS = {
     },
 }
 
+_DEESCALATION_WEIGHTS = {
+    "good weather": 0.2,
+    "clear weather": 0.15,
+    "normal operations": 0.2,
+    "service restored": 0.2,
+    "resolved": 0.15,
+    "stable": 0.1,
+}
+
+_NEGATION_PREFIX = r"(?:no|not|without|none|never|lack of)"
+
 
 def score_severity(text: str) -> Tuple[float, str]:
     """Return a severity score (0-1) and categorical label."""
@@ -44,14 +56,29 @@ def score_severity(text: str) -> Tuple[float, str]:
     for _, terms in _SEVERITY_WEIGHTS.items():
         score += _sum_term_weights(normalized, terms.items())
 
+    # Lower score when text indicates normal conditions or resolved state.
+    score -= _sum_term_weights(normalized, _DEESCALATION_WEIGHTS.items(), subtractive=True)
+
     score = max(0.0, min(score, 1.0))
     label = _label_from_score(score)
     return round(score, 2), label
 
 
-def _sum_term_weights(text: str, term_weights: Iterable[tuple[str, float]]) -> float:
-    """Add weight for each matching severity term."""
-    return sum(weight for term, weight in term_weights if term in text)
+def _sum_term_weights(text: str, term_weights: Iterable[tuple[str, float]], subtractive: bool = False) -> float:
+    """Sum term weights while skipping negated severity phrases."""
+    total = 0.0
+    for term, weight in term_weights:
+        if term in text:
+            if not subtractive and _is_negated(text, term):
+                continue
+            total += weight
+    return total
+
+
+def _is_negated(text: str, term: str) -> bool:
+    """Check if a term is directly negated in a short left context window."""
+    pattern = rf"\b{_NEGATION_PREFIX}\s+(?:\w+\s+){{0,2}}{re.escape(term)}\b"
+    return re.search(pattern, text) is not None
 
 
 def _label_from_score(score: float) -> str:
