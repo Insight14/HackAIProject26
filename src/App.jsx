@@ -4,7 +4,9 @@ import RiskExplanation from './components/RiskExplanation'
 import RegionCards from './components/RegionCards'
 import StressChart from './components/StressChart'
 import IncidentFeed from './components/IncidentFeed'
+import IncidentInput from './components/IncidentInput'
 import SectorAlerts from './components/SectorAlerts'
+import { analyzeIncident, healthCheck } from './api/backend'
 import {
   regions,
   stressScoreHistory,
@@ -55,6 +57,15 @@ function App() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [nlpLoading, setNlpLoading] = useState(false)
+  const [nlpError, setNlpError] = useState('')
+  const [backendConnected, setBackendConnected] = useState(false)
+
+  useEffect(() => {
+    healthCheck()
+      .then(() => setBackendConnected(true))
+      .catch(() => setBackendConnected(false))
+  }, [])
 
   useEffect(() => {
     const loadLiveOutages = async () => {
@@ -210,6 +221,56 @@ function App() {
     loadLiveOutages()
   }, [])
 
+  const handleAnalyzeIncident = async (text) => {
+    setNlpLoading(true)
+    setNlpError('')
+    try {
+      const result = await analyzeIncident(text)
+      const { incident, risk, alert } = result
+
+      const newIncident = {
+        id: `nlp-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        text,
+        eventType: incident.event_type,
+        cause: incident.cause,
+        severity: incident.severity,
+        region: incident.region,
+      }
+
+      setDashboard((prev) => {
+        const score100 = Math.round(risk.risk_score * 100)
+        const newScore = score100 > prev.score ? score100 : prev.score
+
+        let newAlerts = prev.sectorAlerts
+        if (alert.send_alert) {
+          const priorityMap = { P1: 'high', P2: 'high', P3: 'medium', P4: 'low' }
+          newAlerts = [
+            {
+              sector: alert.audience.replace(/_/g, ' '),
+              region: incident.region,
+              recommendation: alert.message,
+              priority: priorityMap[alert.priority] || 'medium',
+            },
+            ...prev.sectorAlerts,
+          ]
+        }
+
+        return {
+          ...prev,
+          score: newScore,
+          incidents: [newIncident, ...prev.incidents],
+          sectorAlerts: newAlerts,
+        }
+      })
+    } catch (err) {
+      console.error('NLP analysis failed:', err)
+      setNlpError(err instanceof Error ? err.message : 'Analysis failed. Is the backend running?')
+    } finally {
+      setNlpLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-grid-dark text-slate-100">
       {/* Header */}
@@ -246,6 +307,9 @@ function App() {
               <span className="text-sm text-slate-400">
                 {error ? 'Live (fallback)' : loading ? 'Loading' : 'Live API'}
               </span>
+              {backendConnected && (
+                <span className="text-xs text-cyan-400">• NLP backend</span>
+              )}
             </div>
           </div>
           {error ? (
@@ -256,6 +320,16 @@ function App() {
 
       {/* Main content */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* NLP incident input */}
+        <div className="mb-6">
+          <IncidentInput onAnalyze={handleAnalyzeIncident} loading={nlpLoading} />
+          {nlpError && (
+            <p className="mt-2 text-sm text-amber-400">
+              {nlpError} — Start the backend with: <code className="rounded bg-slate-700 px-1">cd backend && uvicorn main:app --reload</code>
+            </p>
+          )}
+        </div>
+
         {/* Top row: Risk score + Explanation */}
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">

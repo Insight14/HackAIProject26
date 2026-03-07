@@ -1,0 +1,17 @@
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+export async function analyzeIncident(text) {
+  const res = await fetch(`${API_BASE}/analyze_and_decide`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function healthCheck() {
+  const res = await fetch(`${API_BASE}/health`)
+  if (!res.ok) throw new Error('Backend unreachable')
+  return res.json()
+}

@@ -1,5 +1,6 @@
 function IncidentFeed({ incidents }) {
   const severityStyles = {
+    critical: 'bg-red-500/20 text-red-400',
     high: 'bg-red-500/20 text-red-400',
     medium: 'bg-amber-500/20 text-amber-400',
     low: 'bg-emerald-500/20 text-emerald-400',
@@ -21,7 +22,7 @@ function IncidentFeed({ incidents }) {
           <li key={inc.id} className="border-b border-grid-border pb-4 last:border-0 last:pb-0">
             <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-mono text-slate-500">{formatTime(inc.timestamp)}</span>
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${severityStyles[inc.severity]}`}>
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${severityStyles[inc.severity] ?? severityStyles.medium}`}>
                 {inc.severity}
               </span>
             </div>
