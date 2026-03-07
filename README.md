@@ -1,16 +1,62 @@
-# React + Vite
+# HackAIProject26
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Full-stack outage-risk prototype for HackAI 2026.
 
-Currently, two official plugins are available:
+- Frontend: React + Vite dashboard (`src/` JSX files)
+- Backend ingestion: Python data pipeline (`src/` Python package)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Backend Data Sources
 
-## React Compiler
+- EIA grid operations data (demand / generation)
+- DOE OE-417 disturbance summaries
+- ORNL ODIN real-time outages (county-level)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The ingestion pipeline produces a unified CSV at `data/outages_latest.csv`.
 
-## Expanding the ESLint configuration
+## Backend Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. Create and activate a virtualenv:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+2. Install Python deps:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Add `.env` in project root:
+
+```env
+EIA_API_KEY=your_eia_api_key_here
+DEFAULT_REGION=Texas
+```
+
+## Run Backend Pipeline
+
+```bash
+python -m src.pipeline.build_dataset --region "Texas" --hours 24 --output data/outages_latest.csv
+```
+
+## Frontend Setup
+
+Install Node dependencies:
+
+```bash
+npm install
+```
+
+Run dev server:
+
+```bash
+npm run dev
+```
+
+Build production bundle:
+
+```bash
+npm run build
+```
