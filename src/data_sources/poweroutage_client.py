@@ -24,7 +24,8 @@ def fetch_poweroutage_snapshots(region: str) -> List[GridSnapshot]:
 
     Notes:
     - This endpoint is public and does not require an API key.
-    - `region` is treated as a state name (e.g., "Texas") for filtering.
+        - `region` is treated as a state name (e.g., "California") for filtering.
+            Passing "USA"/"US"/"ALL" fetches unfiltered nationwide records.
     - ODIN is outage-incident oriented, so demand/generation are not available
       and remain unset in GridSnapshot.
     """

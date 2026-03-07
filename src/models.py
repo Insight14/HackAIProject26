@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class GridSnapshot(BaseModel):
-    region: str = Field(..., description="Region or balancing authority, e.g. 'Texas'")
+    region: str = Field(..., description="Region or balancing authority, e.g. 'USA' or 'Texas'")
     timestamp: datetime = Field(..., description="UTC timestamp for the snapshot")
     demand_mw: Optional[float] = Field(
         None, description="Total system demand in MW"

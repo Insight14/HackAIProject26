@@ -6,7 +6,7 @@ import StressChart from './components/StressChart'
 import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
 import SectorAlerts from './components/SectorAlerts'
-import { analyzeIncident, healthCheck } from './api/backend'
+import { analyzeIncident, healthCheck, refreshDataset } from './api/backend'
 import {
   regions,
   stressScoreHistory,
@@ -16,7 +16,63 @@ import {
 } from './data/sampleData'
 
 const ODIN_URL =
-  "https://openenergyhub.ornl.gov/api/explore/v2.1/catalog/datasets/odin-real-time-outages-county/records?select=state,county,name,metersaffected,reportedstarttime,estimatedrestorationtime,incident_cause,statuskind&where=state%20%3D%20'Texas'&limit=100"
+  "https://openenergyhub.ornl.gov/api/explore/v2.1/catalog/datasets/odin-real-time-outages-county/records?select=state,county,name,metersaffected,reportedstarttime,estimatedrestorationtime,incident_cause,statuskind&limit=100"
+
+const STATE_ABBREVIATIONS = {
+  Alabama: 'AL',
+  Alaska: 'AK',
+  Arizona: 'AZ',
+  Arkansas: 'AR',
+  California: 'CA',
+  Colorado: 'CO',
+  Connecticut: 'CT',
+  Delaware: 'DE',
+  Florida: 'FL',
+  Georgia: 'GA',
+  Hawaii: 'HI',
+  Idaho: 'ID',
+  Illinois: 'IL',
+  Indiana: 'IN',
+  Iowa: 'IA',
+  Kansas: 'KS',
+  Kentucky: 'KY',
+  Louisiana: 'LA',
+  Maine: 'ME',
+  Maryland: 'MD',
+  Massachusetts: 'MA',
+  Michigan: 'MI',
+  Minnesota: 'MN',
+  Mississippi: 'MS',
+  Missouri: 'MO',
+  Montana: 'MT',
+  Nebraska: 'NE',
+  Nevada: 'NV',
+  'New Hampshire': 'NH',
+  'New Jersey': 'NJ',
+  'New Mexico': 'NM',
+  'New York': 'NY',
+  'North Carolina': 'NC',
+  'North Dakota': 'ND',
+  Ohio: 'OH',
+  Oklahoma: 'OK',
+  Oregon: 'OR',
+  Pennsylvania: 'PA',
+  'Rhode Island': 'RI',
+  'South Carolina': 'SC',
+  'South Dakota': 'SD',
+  Tennessee: 'TN',
+  Texas: 'TX',
+  Utah: 'UT',
+  Vermont: 'VT',
+  Virginia: 'VA',
+  Washington: 'WA',
+  'West Virginia': 'WV',
+  Wisconsin: 'WI',
+  Wyoming: 'WY',
+  'District of Columbia': 'DC',
+}
+
+const stateAbbreviation = (stateName) => STATE_ABBREVIATIONS[stateName] || 'US'
 
 const riskFromScore = (score) => {
   if (score >= 70) return 'high'
@@ -60,6 +116,8 @@ function App() {
   const [nlpLoading, setNlpLoading] = useState(false)
   const [nlpError, setNlpError] = useState('')
   const [backendConnected, setBackendConnected] = useState(false)
+  const [csvRefreshLoading, setCsvRefreshLoading] = useState(false)
+  const [csvRefreshMessage, setCsvRefreshMessage] = useState('')
 
   useEffect(() => {
     healthCheck()
@@ -92,6 +150,7 @@ function App() {
           const cause = r.incident_cause || 'Unknown'
           const utility = r.name || 'Unknown Utility'
           const county = r.county || 'Unknown County'
+          const state = r.state || 'Unknown State'
 
           return {
             id: `${utility}-${county}-${index}`,
@@ -101,6 +160,7 @@ function App() {
             cause,
             utility,
             county,
+            state,
           }
         })
 
@@ -116,23 +176,27 @@ function App() {
           eventType: x.status,
           cause: x.cause,
           severity: severityFromMeters(x.meters),
-          region: `${x.county}, TX`,
+          region: `${x.county}, ${stateAbbreviation(x.state)}`,
         }))
 
         const byCounty = normalized.reduce((acc, x) => {
-          acc[x.county] = (acc[x.county] || 0) + x.meters
+          const key = `${x.county}, ${x.state}`
+          if (!acc[key]) {
+            acc[key] = { meters: 0, county: x.county, state: x.state }
+          }
+          acc[key].meters += x.meters
           return acc
         }, {})
 
-        const regionsLive = Object.entries(byCounty)
-          .sort((a, b) => b[1] - a[1])
+        const regionsLive = Object.values(byCounty)
+          .sort((a, b) => b.meters - a.meters)
           .slice(0, 4)
-          .map(([county, meters], idx) => {
-            const countyScore = scoreFromMeters(meters)
+          .map((entry, idx) => {
+            const countyScore = scoreFromMeters(entry.meters)
             return {
               id: `county-${idx}`,
-              name: `${county} County`,
-              abbreviation: 'TX',
+              name: `${entry.county} County`,
+              abbreviation: stateAbbreviation(entry.state),
               score: countyScore,
               risk: riskFromScore(countyScore),
             }
@@ -172,7 +236,7 @@ function App() {
           },
         ]
 
-        const topCounty = regionsLive[0]?.name || 'Texas'
+        const topCounty = regionsLive[0]?.name || 'United States'
         const topRisk = riskFromScore(score)
         const alertsLive = [
           {
@@ -271,6 +335,21 @@ function App() {
     }
   }
 
+  const handleRefreshCsv = async () => {
+    setCsvRefreshLoading(true)
+    setCsvRefreshMessage('')
+
+    try {
+      const result = await refreshDataset({ region: 'USA', hours: 24, output: 'data/outages_latest.csv' })
+      setCsvRefreshMessage(`CSV refreshed: ${result.rows_written} rows written.`)
+    } catch (err) {
+      console.error('CSV refresh failed:', err)
+      setCsvRefreshMessage(err instanceof Error ? err.message : 'CSV refresh failed')
+    } finally {
+      setCsvRefreshLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-grid-dark text-slate-100">
       {/* Header */}
@@ -311,6 +390,19 @@ function App() {
                 <span className="text-xs text-cyan-400">• NLP backend</span>
               )}
             </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRefreshCsv}
+              disabled={!backendConnected || csvRefreshLoading}
+              className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {csvRefreshLoading ? 'Refreshing CSV...' : 'Refresh outages_latest.csv'}
+            </button>
+            {csvRefreshMessage ? (
+              <p className="text-xs text-slate-400">{csvRefreshMessage}</p>
+            ) : null}
           </div>
           {error ? (
             <p className="mt-2 text-xs text-amber-400">ODIN API unavailable: {error}</p>

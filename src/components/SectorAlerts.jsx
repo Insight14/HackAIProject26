@@ -11,7 +11,7 @@ function SectorAlerts({ alerts }) {
         Sector Alerts
       </h3>
       <p className="mt-1 text-xs text-slate-500">
-        High outage risk in North Texas within next 2 hours
+        Elevated outage risk in priority U.S. regions within the next 2 hours
       </p>
       <ul className="mt-4 space-y-3">
         {alerts.map((a, i) => (

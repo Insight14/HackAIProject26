@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -74,6 +79,22 @@ class AnalyzeDecideResponse(BaseModel):
     incident: IncidentResponse
     risk: RiskResponse
     alert: AlertResponse
+
+
+class DatasetRefreshRequest(BaseModel):
+    region: str = Field(default="USA", min_length=2, description="Region scope used by pipeline")
+    hours: int = Field(default=24, ge=1, le=168, description="Recent hours of data to pull")
+    output: str = Field(default="data/outages_latest.csv", description="Output CSV path")
+
+
+class DatasetRefreshResponse(BaseModel):
+    success: bool
+    rows_written: int
+    output_path: str
+    region: str
+    hours: int
+    message: str
+    logs: str | None = None
 
 
 @app.get("/health")
@@ -170,3 +191,54 @@ def analyze_and_decide(payload: AnalyzeDecideRequest) -> AnalyzeDecideResponse:
     )
 
     return AnalyzeDecideResponse(incident=incident, risk=risk, alert=alert)
+
+
+@app.post("/refresh_dataset", response_model=DatasetRefreshResponse)
+def refresh_dataset(payload: DatasetRefreshRequest) -> DatasetRefreshResponse:
+    repo_root = Path(__file__).resolve().parents[1]
+    output_path = repo_root / payload.output
+
+    command = [
+        sys.executable,
+        "-m",
+        "src.pipeline.build_dataset",
+        "--region",
+        payload.region,
+        "--hours",
+        str(payload.hours),
+        "--output",
+        payload.output,
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    logs = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dataset refresh failed (exit {result.returncode}).\n{logs}",
+        )
+
+    if not output_path.exists():
+        raise HTTPException(status_code=500, detail=f"Expected output file not found: {payload.output}")
+
+    # Count data rows only (exclude header).
+    with output_path.open("r", encoding="utf-8", errors="ignore") as f:
+        rows_written = max(sum(1 for _ in f) - 1, 0)
+
+    return DatasetRefreshResponse(
+        success=True,
+        rows_written=rows_written,
+        output_path=payload.output,
+        region=payload.region,
+        hours=payload.hours,
+        message=f"Refreshed dataset with {rows_written} rows.",
+        logs=logs[-2000:] if logs else None,
+    )

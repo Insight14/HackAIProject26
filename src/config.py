@@ -13,7 +13,7 @@ load_dotenv()
 @dataclass
 class Settings:
     eia_api_key: Optional[str] = os.getenv("EIA_API_KEY")
-    default_region: str = os.getenv("DEFAULT_REGION", "Texas")
+    default_region: str = os.getenv("DEFAULT_REGION", "USA")
     data_dir: str = os.getenv("DATA_DIR", "data")
 
 

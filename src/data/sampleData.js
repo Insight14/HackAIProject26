@@ -1,5 +1,5 @@
 export const regions = [
-  { id: 'texas', name: 'Texas', risk: 'high', score: 78, abbreviation: 'ERCOT' },
+  { id: 'us-national', name: 'United States', risk: 'high', score: 78, abbreviation: 'USA' },
   { id: 'california', name: 'California', risk: 'medium', score: 52, abbreviation: 'CAISO' },
   { id: 'pjm', name: 'PJM (Mid-Atlantic)', risk: 'low', score: 28, abbreviation: 'PJM' },
   { id: 'miso', name: 'MISO (Midwest)', risk: 'medium', score: 45, abbreviation: 'MISO' },
@@ -26,11 +26,11 @@ export const incidents = [
   {
     id: 1,
     timestamp: '2026-03-07T14:32:00',
-    text: 'Transmission line failure due to severe storm activity in North Texas',
+    text: 'Transmission line failure due to severe storm activity in Central Ohio',
     eventType: 'transmission failure',
     cause: 'storm',
     severity: 'high',
-    region: 'North Texas',
+    region: 'Central Ohio',
   },
   {
     id: 2,
@@ -48,32 +48,32 @@ export const incidents = [
     eventType: 'generation curtailment',
     cause: 'grid stability',
     severity: 'medium',
-    region: 'West Texas',
+    region: 'Texas Panhandle',
   },
 ];
 
 export const sectorAlerts = [
   {
     sector: 'Hospitals',
-    region: 'North Texas',
+    region: 'Central Ohio',
     recommendation: 'Activate backup power systems. Prepare for potential brownouts.',
     priority: 'high',
   },
   {
     sector: 'Telecom',
-    region: 'North Texas',
+    region: 'Central Ohio',
     recommendation: 'Prepare tower backup power. Monitor cell site battery levels.',
     priority: 'high',
   },
   {
     sector: 'Transportation',
-    region: 'North Texas',
+    region: 'Central Ohio',
     recommendation: 'Prepare signal contingency. Alert traffic management centers.',
     priority: 'medium',
   },
   {
     sector: 'Emergency Services',
-    region: 'North Texas',
+    region: 'Central Ohio',
     recommendation: 'Ensure generator fuel levels. Activate emergency protocols.',
     priority: 'high',
   },

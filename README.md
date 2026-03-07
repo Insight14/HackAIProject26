@@ -32,13 +32,13 @@ pip install -r requirements.txt
 
 ```env
 EIA_API_KEY=your_eia_api_key_here
-DEFAULT_REGION=Texas
+DEFAULT_REGION=USA
 ```
 
 ## Run Backend Pipeline
 
 ```bash
-python -m src.pipeline.build_dataset --region "Texas" --hours 24 --output data/outages_latest.csv
+python -m src.pipeline.build_dataset --region "USA" --hours 24 --output data/outages_latest.csv
 ```
 
 ## Frontend Setup

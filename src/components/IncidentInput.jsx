@@ -21,7 +21,7 @@ function IncidentInput({ onAnalyze, loading }) {
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="e.g. Transmission line failure due to severe storm in North Texas"
+          placeholder="e.g. Transmission line failure due to severe storm in Ohio"
           className="flex-1 rounded-lg border border-grid-border bg-slate-800/50 px-4 py-2 text-slate-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
           minLength={5}
           disabled={loading}

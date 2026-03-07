@@ -14,7 +14,7 @@ function StressChart({ data }) {
       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
         Grid Stress Score Over Time
       </h3>
-      <p className="mt-1 text-xs text-slate-500">Last 12 hours — Texas (ERCOT)</p>
+      <p className="mt-1 text-xs text-slate-500">Last 12 hours — United States</p>
       <div className="mt-4 h-48">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
