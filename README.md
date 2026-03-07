@@ -8,7 +8,7 @@ Goal for this slice: build a small Python backend module that **fetches and norm
 - **Data ingestion only (MVP)**:
   - EIA grid operations data (demand / generation / region)
   - DOE OE-417 disturbance / outage incident summaries
-  - Power outage data (placeholder client for `poweroutage.us`)
+  - ORNL ODIN real-time outage data (county-level incidents)
 - **Unified internal record** so everything looks like:
 
 ```json
@@ -32,7 +32,7 @@ Risk scoring, NLP, and UI will be layered on top in later branches.
   - `data_sources/`
     - `eia_client.py` – helpers for EIA Open Data API
     - `oe417_client.py` – helpers for DOE OE-417 annual summary data
-    - `poweroutage_client.py` – placeholder / future HTML or API client
+    - `poweroutage_client.py` – ORNL ODIN outage API client
   - `pipeline/`
     - `build_dataset.py` – orchestration to pull from all sources and emit a unified dataframe or CSV
 
@@ -61,7 +61,7 @@ EIA_API_KEY=your_eia_api_key_here
 DEFAULT_REGION=Texas
 ```
 
-> NOTE: The EIA API key is required for live calls; other sources can be downloaded from the web or mocked during development.
+> NOTE: The EIA API key is required for EIA live calls. OE-417 and ODIN outage data are public endpoints.
 
 ### Running the ingestion pipeline (local)
 

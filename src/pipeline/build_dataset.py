@@ -28,13 +28,25 @@ def build_unified_dataset(region: str, hours: int) -> pd.DataFrame:
     logger.info("Building unified dataset for region=%s hours=%d", region, hours)
 
     # 1) Grid data from EIA
-    eia_snapshots: List[GridSnapshot] = fetch_recent_grid_data(region, hours=hours)
+    try:
+        eia_snapshots: List[GridSnapshot] = fetch_recent_grid_data(region, hours=hours)
+    except Exception as exc:
+        logger.warning("EIA fetch failed; continuing with other sources: %s", exc)
+        eia_snapshots = []
 
     # 2) Disturbance incidents from OE-417
-    oe_events = fetch_oe417_events()
+    try:
+        oe_events = fetch_oe417_events()
+    except Exception as exc:
+        logger.warning("OE-417 fetch failed; continuing with other sources: %s", exc)
+        oe_events = []
 
-    # 3) (Optional) Poweroutage.us data, currently a stub
-    po_snapshots = fetch_poweroutage_snapshots(region)
+    # 3) ODIN outage data
+    try:
+        po_snapshots = fetch_poweroutage_snapshots(region)
+    except Exception as exc:
+        logger.warning("Power outage fetch failed; continuing with other sources: %s", exc)
+        po_snapshots = []
 
     # Convert GridSnapshot objects to DataFrame
     grid_rows = [
