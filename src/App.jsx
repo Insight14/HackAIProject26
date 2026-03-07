@@ -5,8 +5,9 @@ import RegionCards from './components/RegionCards'
 import StressChart from './components/StressChart'
 import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
+import NaturalDisasterFeed from './components/NaturalDisasterFeed'
 import SectorAlerts from './components/SectorAlerts'
-import { analyzeIncident, healthCheck, refreshDataset } from './api/backend'
+import { analyzeIncident, healthCheck, refreshDataset, fetchDisasterEvents } from './api/backend'
 import {
   regions,
   stressScoreHistory,
@@ -102,6 +103,14 @@ const toHourLabel = (iso) => {
   return `${String(d.getHours()).padStart(2, '0')}:00`
 }
 
+const normalizeSeverity = (value) => {
+  const v = (value || '').toString().toLowerCase()
+  if (v.includes('extreme') || v.includes('severe') || v.includes('critical')) return 'high'
+  if (v.includes('moderate') || v.includes('medium')) return 'medium'
+  if (v.includes('minor') || v.includes('low')) return 'low'
+  return 'medium'
+}
+
 function App() {
   const [dashboard, setDashboard] = useState({
     score: 78,
@@ -109,6 +118,7 @@ function App() {
     stressScoreHistory,
     riskFactors,
     incidents,
+    disasterIncidents: [],
     sectorAlerts,
   })
   const [loading, setLoading] = useState(true)
@@ -179,6 +189,27 @@ function App() {
           region: `${x.county}, ${stateAbbreviation(x.state)}`,
         }))
 
+        let disasterIncidents = []
+        let highDisasterCount = 0
+        try {
+          const disasterEvents = await fetchDisasterEvents()
+          disasterIncidents = (Array.isArray(disasterEvents) ? disasterEvents : []).slice(0, 20).map((evt, idx) => {
+            const severity = normalizeSeverity(evt.severity)
+            if (severity === 'high') highDisasterCount += 1
+            return {
+              id: `disaster-${idx}-${evt.source || 'api'}`,
+              timestamp: toIsoOrNow(evt.timestamp),
+              text: evt.description || `${evt.event_type || 'Event'} reported in ${evt.region || 'Unknown region'}`,
+              eventType: evt.event_type || 'Natural Disaster',
+              cause: evt.source || 'Natural hazard',
+              severity,
+              region: evt.region || 'Unknown region',
+            }
+          })
+        } catch (evtErr) {
+          console.warn('Natural disaster events unavailable:', evtErr)
+        }
+
         const byCounty = normalized.reduce((acc, x) => {
           const key = `${x.county}, ${x.state}`
           if (!acc[key]) {
@@ -217,7 +248,7 @@ function App() {
         const pendingCount = normalized.filter((x) => x.status.toLowerCase().includes('pending')).length
         const highImpactCount = normalized.filter((x) => x.meters >= 20).length
 
-        const totalSignals = Math.max(1, plannedCount + pendingCount + highImpactCount)
+        const totalSignals = Math.max(1, plannedCount + pendingCount + highImpactCount + highDisasterCount)
         const factorsLive = [
           {
             factor: 'Pending assessments',
@@ -233,6 +264,11 @@ function App() {
             factor: 'High-impact incidents (20+ customers)',
             contribution: Math.round((highImpactCount / totalSignals) * 100),
             severity: highImpactCount > 2 ? 'high' : highImpactCount > 0 ? 'medium' : 'low',
+          },
+          {
+            factor: 'High-severity natural disaster signals',
+            contribution: Math.round((highDisasterCount / totalSignals) * 100),
+            severity: highDisasterCount > 10 ? 'high' : highDisasterCount > 0 ? 'medium' : 'low',
           },
         ]
 
@@ -259,12 +295,22 @@ function App() {
           },
         ]
 
+        if (highDisasterCount > 0) {
+          alertsLive.unshift({
+            sector: 'State Emergency Management',
+            region: 'Multi-region',
+            recommendation: `Monitor ${highDisasterCount} high-severity natural disaster signal(s) from NOAA/FIRMS feeds.`,
+            priority: highDisasterCount > 5 ? 'high' : 'medium',
+          })
+        }
+
         setDashboard({
           score,
           regions: regionsLive.length ? regionsLive : regions,
           stressScoreHistory: stressLive.length ? stressLive : stressScoreHistory,
           riskFactors: factorsLive,
           incidents: incidentsLive,
+          disasterIncidents,
           sectorAlerts: alertsLive,
         })
       } catch (err) {
@@ -275,6 +321,7 @@ function App() {
           stressScoreHistory,
           riskFactors,
           incidents,
+          disasterIncidents: [],
           sectorAlerts,
         })
       } finally {
@@ -442,8 +489,9 @@ function App() {
           <div className="lg:col-span-2">
             <StressChart data={dashboard.stressScoreHistory} />
           </div>
-          <div>
+          <div className="space-y-6">
             <IncidentFeed incidents={dashboard.incidents} />
+            <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
           </div>
         </div>
 

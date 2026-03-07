@@ -29,3 +29,9 @@ export async function refreshDataset({ region = 'USA', hours = 24, output = 'dat
 
   return res.json()
 }
+
+export async function fetchDisasterEvents() {
+  const res = await fetch(`${API_BASE}/events`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}

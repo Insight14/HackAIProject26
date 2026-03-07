@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from alert_router import decide_alert
+from disaster_events import get_active_disaster_events
 from incident_parser import parse_incident_text
 from risk_engine import score_incident_risk
 
@@ -97,9 +98,24 @@ class DatasetRefreshResponse(BaseModel):
     logs: str | None = None
 
 
+class DisasterEventResponse(BaseModel):
+    event_type: str
+    region: str
+    timestamp: str
+    severity: str
+    source: str
+    description: str
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/events", response_model=list[DisasterEventResponse])
+def disaster_events() -> list[DisasterEventResponse]:
+    events = get_active_disaster_events()
+    return [DisasterEventResponse(**event) for event in events]
 
 
 @app.post("/analyze_incident", response_model=IncidentResponse)

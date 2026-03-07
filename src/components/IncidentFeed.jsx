@@ -16,7 +16,7 @@ function IncidentFeed({ incidents }) {
       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
         Recent Incident Reports
       </h3>
-      <p className="mt-1 text-xs text-slate-500">NLP-extracted from disturbance descriptions</p>
+      <p className="mt-1 text-xs text-slate-500">Blended from outage telemetry, NLP inputs, and NOAA/FIRMS disaster feeds</p>
       <ul className="mt-4 space-y-4 max-h-64 overflow-y-auto">
         {incidents.map((inc) => (
           <li key={inc.id} className="border-b border-grid-border pb-4 last:border-0 last:pb-0">
