@@ -42,45 +42,39 @@ export default function PhoneAlertSignup() {
   };
 
   return (
-    <div style={{
-      maxWidth: 340,
-      margin: "24px auto",
-      padding: 20,
-      border: "1px solid #333",
-      borderRadius: 8,
-      background: "#181a20",
-      boxShadow: "0 2px 8px #0008"
-    }}>
-      <h3 style={{ margin: "0 0 8px", color: "#fff" }}>Phone Alert Signup</h3>
-      <div style={{ fontSize: 14, marginBottom: 12, color: "#ccc" }}>
-        Enter your phone number and carrier to receive free SMS outage alerts.
-      </div>
+    <div className="rounded-3xl border border-grid-border bg-grid-card p-6 shadow-xl">
+      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        Phone Alert Signup
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        Enter your phone number and carrier to receive outage alerts via SMS.
+      </p>
       <input
         type="tel"
         placeholder="e.g. 5551234567"
         value={phone}
-        onChange={e => setPhone(e.target.value)}
-        style={{ width: "100%", marginBottom: 8, padding: 8, fontSize: 15, background: "#23262f", color: "#fff", border: "1px solid #444" }}
+        onChange={(e) => setPhone(e.target.value)}
+        className="mt-4 w-full rounded-xl border border-grid-border bg-slate-800/50 px-4 py-2.5 text-slate-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
       />
       <select
         value={carrier}
-        onChange={e => setCarrier(e.target.value)}
-        style={{ width: "100%", marginBottom: 8, padding: 8, fontSize: 15, background: "#23262f", color: "#fff", border: "1px solid #444" }}
+        onChange={(e) => setCarrier(e.target.value)}
+        className="mt-3 w-full rounded-xl border border-grid-border bg-slate-800/50 px-4 py-2.5 text-slate-200 focus:border-cyan-500 focus:outline-none"
       >
-        {Object.keys(CARRIER_GATEWAYS).map(c => (
+        {Object.keys(CARRIER_GATEWAYS).map((c) => (
           <option key={c} value={c}>{c}</option>
         ))}
       </select>
       <button
         onClick={subscribe}
-        style={{ width: "100%", marginBottom: 10, padding: 8, fontSize: 15, background: "#23262f", color: "#fff", border: "1px solid #444" }}
+        className="mt-4 w-full rounded-xl bg-cyan-600 px-4 py-2.5 font-medium text-white hover:bg-cyan-500 transition-colors"
       >
         Subscribe
       </button>
-      <div style={{ minHeight: 24, fontSize: 14, color: "#fff" }}>{status}</div>
-      <div style={{ fontSize: 12, color: "#aaa", marginTop: 8 }}>
+      <div className="mt-3 min-h-6 text-sm text-slate-300">{status}</div>
+      <p className="mt-3 text-xs text-slate-500">
         Free SMS via carrier gateway. Not for production use.
-      </div>
+      </p>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
 import NaturalDisasterFeed from './components/NaturalDisasterFeed'
 import SectorAlerts from './components/SectorAlerts'
+import PhoneAlertSignup from './components/PhoneAlertSignup'
 import {
   analyzeIncident,
   healthCheck,
@@ -851,14 +852,10 @@ function App() {
           </div>
         </div>
 
-        {/* Top row: Risk score + Explanation */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <RiskScore score={dashboard.score} />
-          </div>
-          <div className="lg:col-span-2">
-            <RiskExplanation factors={dashboard.riskFactors} />
-          </div>
+        {/* Top row: Risk score (circular) + Why the risk is high - side by side */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <RiskScore score={dashboard.score} />
+          <RiskExplanation factors={dashboard.riskFactors} />
         </div>
 
 
@@ -893,9 +890,10 @@ function App() {
           <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
         </div>
 
-        {/* Sector alerts - full width */}
-        <div className="mt-6">
+        {/* Sector alerts + Phone alert signup - side by side */}
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <SectorAlerts alerts={dashboard.sectorAlerts} />
+          <PhoneAlertSignup />
         </div>
       </main>
     </div>
