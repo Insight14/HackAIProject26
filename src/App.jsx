@@ -574,12 +574,12 @@ function App() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                    d="M12 3l7 3v5c0 5-3.5 8.8-7 10-3.5-1.2-7-5-7-10V6l7-3z"
                   />
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">GridWatch</h1>
+                <h1 className="text-xl font-bold tracking-tight">Aegis</h1>
                 <p className="text-xs text-slate-500">Outage Risk & Early Warning System</p>
               </div>
             </div>
