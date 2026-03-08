@@ -593,10 +593,11 @@ function App() {
           <div>
             <IncidentFeed incidents={dashboard.incidents} />
           </div>
+        </div>
 
-          <div className="lg:col-span-3">
-            <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
-          </div>
+        {/* Natural disaster feed - full width */}
+        <div className="mt-6">
+          <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
         </div>
 
         {/* Sector alerts - full width */}
