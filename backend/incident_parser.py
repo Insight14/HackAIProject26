@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from event_classifier import classify_event_type
-from region_extractor import extract_region
-from severity_model import score_severity
+from backend.event_classifier import classify_event_type
+from backend.region_extractor import extract_region
+from backend.severity_model import score_severity
 
 
 _CAUSE_KEYWORDS = {

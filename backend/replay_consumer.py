@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from official_feed import FeedDocument, OfficialFeedAdapter
+from backend.official_feed import FeedDocument, OfficialFeedAdapter
 
 
 @dataclass

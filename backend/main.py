@@ -15,14 +15,15 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from typing import Literal
 
-from alert_router import decide_alert
-from disaster_events import get_active_disaster_events
-from incident_parser import parse_incident_text
-from gemini_recommender import suggest_response_actions
-from official_feed import CsvOfficialFeedAdapter
-from official_feed import ReplayApiOfficialFeedAdapter
-from replay_consumer import ReplayConsumer
-from risk_engine import score_incident_risk
+from backend.alert_router import decide_alert
+from backend.disaster_events import get_active_disaster_events
+from backend.incident_parser import parse_incident_text
+from backend.gemini_recommender import suggest_response_actions
+from backend.official_feed import CsvOfficialFeedAdapter
+from backend.official_feed import ReplayApiOfficialFeedAdapter
+from backend.replay_consumer import ReplayConsumer
+from backend.risk_engine import score_incident_risk
+from backend.event_classifier import *
 
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -467,3 +468,25 @@ def replay_next(payload: ReplayNextRequest) -> ReplayNextResponse:
         decisions.append(ReplayDecision(document=replay_doc, incident=incident, risk=risk, alert=alert))
 
     return ReplayNextResponse(consumed_count=len(decisions), decisions=decisions)
+
+
+@app.post("/api/send-alert-email")
+async def send_alert_email(request: Request):
+    data = await request.json()
+    email = data.get("email")
+    if not email:
+        return {"error": "Email required"}
+    try:
+        msg = EmailMessage()
+        msg.set_content("You are subscribed to outage alerts!")
+        msg["Subject"] = "Outage Alert Signup"
+        msg["From"] = "your_gmail@gmail.com"
+        msg["To"] = email
+
+        # Use your Gmail credentials (enable App Passwords if 2FA is on)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login("your_gmail@gmail.com", "your_app_password")
+            smtp.send_message(msg)
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
