@@ -3,10 +3,12 @@ import RiskScore from './components/RiskScore'
 import RiskExplanation from './components/RiskExplanation'
 import RegionCards from './components/RegionCards'
 import StressChart from './components/StressChart'
+import OutageForecast from './components/OutageForecast';
 import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
 import NaturalDisasterFeed from './components/NaturalDisasterFeed'
 import SectorAlerts from './components/SectorAlerts'
+import PhoneAlertAuth from "./components/PhoneAlertAuth";
 import {
   analyzeIncident,
   healthCheck,
@@ -657,12 +659,12 @@ function App() {
               <div className="mt-3 space-y-3">
                 <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
                   <p className="text-xs uppercase tracking-wider text-slate-500">Analyzed input</p>
-                  <p className="mt-1 text-sm italic leading-relaxed text-slate-300 whitespace-normal break-words">
+                  <p className="mt-1 text-sm italic leading-relaxed text-slate-300 whitespace-normal wrap-break-word">
                     "{latestSuggestion.description}"
                   </p>
                 </div>
 
-                <p className="text-sm leading-relaxed text-slate-300 whitespace-normal break-words">
+                <p className="text-sm leading-relaxed text-slate-300 whitespace-normal wrap-break-word">
                   {latestSuggestion.assessment}
                 </p>
                 <ul className="space-y-2">
@@ -773,7 +775,7 @@ function App() {
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 break-all">doc_id: {entry.document.doc_id}</p>
-                      <p className="mt-1 text-sm text-slate-200 break-words">{entry.document.text}</p>
+                      <p className="mt-1 text-sm text-slate-200 wrap-break-word">{entry.document.text}</p>
                       <p className="mt-2 text-xs text-slate-400">
                         decision: {entry.alert.send_alert ? `${entry.alert.priority} alert via ${entry.alert.channel}` : 'no alert'}
                       </p>
@@ -795,9 +797,21 @@ function App() {
           </div>
         </div>
 
+
         {/* Region cards */}
         <div className="mt-6">
           <RegionCards regions={dashboard.regions} />
+        </div>
+
+        {/* Outage Forecast Table - below Outage Risk by Region */}
+        <div className="mt-6">
+          <OutageForecast
+            region={dashboard.regions && dashboard.regions[0]?.name}
+            currentStressScore={dashboard.regions && dashboard.regions[0]?.score}
+            historicalStressScores={dashboard.stressScoreHistory?.map((s) => s.score) || []}
+            disasterSeverity={dashboard.disasterIncidents && dashboard.disasterIncidents.length > 0 ? 1 : 0}
+            incidentSeverity={dashboard.incidents && dashboard.incidents.length > 0 ? 1 : 0}
+          />
         </div>
 
         {/* Chart + Incident feed */}
@@ -818,6 +832,7 @@ function App() {
         {/* Sector alerts - full width */}
         <div className="mt-6">
           <SectorAlerts alerts={dashboard.sectorAlerts} />
+          <PhoneAlertAuth />
         </div>
       </main>
     </div>
