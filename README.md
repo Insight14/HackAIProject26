@@ -41,6 +41,31 @@ DEFAULT_REGION=USA
 python -m src.pipeline.build_dataset --region "USA" --hours 24 --output data/outages_latest.csv
 ```
 
+## Official Feed Adapter and Replay Consumer
+
+The backend now supports a strict timestamp-ordered replay consumer for the official feed requirement.
+
+Configuration via environment variables:
+
+- `OFFICIAL_FEED_SOURCE`: `csv` (default) or `api`
+- `OFFICIAL_FEED_CSV_PATH`: local dataset path (default `data/outages_latest.csv`)
+- `OFFICIAL_FEED_REPLAY_URL`: required when `OFFICIAL_FEED_SOURCE=api`
+- `OFFICIAL_FEED_CURSOR_PATH`: persisted watermark cursor path (default `backend/.replay_cursor.json`)
+
+Replay endpoints:
+
+- `GET /feed/replay/status`: current cursor and pending docs
+- `POST /feed/replay/next` with `{ "batch_size": N }`: consume next N docs in timestamp order and run NLP -> risk -> alert
+- `POST /feed/replay/reset`: reset cursor to replay from the start
+
+Example:
+
+```bash
+curl http://localhost:8000/feed/replay/status
+curl -X POST http://localhost:8000/feed/replay/next -H "Content-Type: application/json" -d '{"batch_size": 3}'
+curl -X POST http://localhost:8000/feed/replay/reset
+```
+
 ## Frontend Setup
 
 Install Node dependencies:

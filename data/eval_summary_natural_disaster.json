@@ -1,0 +1,26 @@
+{
+  "config": {
+    "horizon_minutes": 180,
+    "impact_threshold": 100,
+    "outcome_mode": "severity",
+    "risk_alert_threshold": 0.7,
+    "max_documents": 200,
+    "true_positive_gain": 5.0,
+    "false_positive_cost": 1.0,
+    "false_negative_cost": 3.0
+  },
+  "summary": {
+    "documents_evaluated": 200,
+    "outcome_mode": "severity",
+    "tp": 0,
+    "fp": 0,
+    "tn": 188,
+    "fn": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "false_alarm_rate": 0.0,
+    "accuracy": 0.94,
+    "avg_lead_time_minutes": 0.0,
+    "utility_score": -36.0
+  }
+}

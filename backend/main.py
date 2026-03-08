@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -17,6 +19,9 @@ from alert_router import decide_alert
 from disaster_events import get_active_disaster_events
 from incident_parser import parse_incident_text
 from gemini_recommender import suggest_response_actions
+from official_feed import CsvOfficialFeedAdapter
+from official_feed import ReplayApiOfficialFeedAdapter
+from replay_consumer import ReplayConsumer
 from risk_engine import score_incident_risk
 
 
@@ -143,6 +148,68 @@ class SuggestResponseResponse(BaseModel):
     public_message: str
     confidence: float
     fallback_reason: str | None = None
+
+
+class ReplayStatusResponse(BaseModel):
+    source: str
+    consumed_timestamp: str | None
+    consumed_doc_id: str | None
+    total_documents: int
+    pending_documents: int
+    next_timestamp: str | None
+    next_doc_id: str | None
+
+
+class ReplayNextRequest(BaseModel):
+    batch_size: int = Field(default=1, ge=1, le=100)
+
+
+class ReplayDocument(BaseModel):
+    doc_id: str
+    timestamp: str
+    text: str
+    source: str
+    metadata: dict
+
+
+class ReplayDecision(BaseModel):
+    document: ReplayDocument
+    incident: IncidentResponse
+    risk: RiskResponse
+    alert: AlertResponse
+
+
+class ReplayNextResponse(BaseModel):
+    consumed_count: int
+    decisions: list[ReplayDecision]
+
+
+class ReplayResetResponse(BaseModel):
+    success: bool
+    message: str
+
+
+def _build_replay_consumer() -> tuple[ReplayConsumer, str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    source = (os.getenv("OFFICIAL_FEED_SOURCE") or "csv").strip().lower()
+
+    if source == "api":
+        replay_url = os.getenv("OFFICIAL_FEED_REPLAY_URL", "").strip()
+        if not replay_url:
+            raise RuntimeError("OFFICIAL_FEED_REPLAY_URL must be set when OFFICIAL_FEED_SOURCE=api")
+        adapter = ReplayApiOfficialFeedAdapter(url=replay_url)
+    else:
+        csv_rel = os.getenv("OFFICIAL_FEED_CSV_PATH", "data/outages_latest.csv").strip()
+        adapter = CsvOfficialFeedAdapter(csv_path=repo_root / csv_rel)
+        source = "csv"
+
+    cursor_rel = os.getenv("OFFICIAL_FEED_CURSOR_PATH", "backend/.replay_cursor.json").strip()
+    consumer = ReplayConsumer(adapter=adapter, cursor_path=repo_root / cursor_rel)
+    return consumer, source
+
+
+_replay_consumer, _replay_source = _build_replay_consumer()
+_replay_lock = Lock()
 
 
 @app.get("/health")
@@ -310,3 +377,79 @@ def refresh_dataset(payload: DatasetRefreshRequest) -> DatasetRefreshResponse:
         message=f"Refreshed dataset with {rows_written} rows.",
         logs=logs[-2000:] if logs else None,
     )
+
+
+@app.get("/feed/replay/status", response_model=ReplayStatusResponse)
+def replay_status() -> ReplayStatusResponse:
+    with _replay_lock:
+        status = _replay_consumer.status()
+
+    return ReplayStatusResponse(source=_replay_source, **status)
+
+
+@app.post("/feed/replay/reset", response_model=ReplayResetResponse)
+def replay_reset() -> ReplayResetResponse:
+    with _replay_lock:
+        _replay_consumer.reset()
+
+    return ReplayResetResponse(success=True, message="Replay cursor reset to start of feed.")
+
+
+@app.post("/feed/replay/next", response_model=ReplayNextResponse)
+def replay_next(payload: ReplayNextRequest) -> ReplayNextResponse:
+    with _replay_lock:
+        docs = _replay_consumer.consume_next(batch_size=payload.batch_size)
+
+    decisions: list[ReplayDecision] = []
+    for doc in docs:
+        signal = parse_incident_text(doc.text)
+
+        incident = IncidentResponse(
+            event_type=signal.event_type,
+            cause=signal.cause,
+            severity=signal.severity,
+            severity_score=signal.severity_score,
+            region=signal.region,
+            confidence=signal.confidence,
+        )
+
+        risk_result = score_incident_risk(
+            event_type=incident.event_type,
+            cause=incident.cause,
+            severity_score=incident.severity_score,
+            confidence=incident.confidence,
+        )
+
+        risk = RiskResponse(
+            risk_score=risk_result.risk_score,
+            risk_level=risk_result.risk_level,
+            recommended_action=risk_result.recommended_action,
+        )
+
+        alert_result = decide_alert(
+            risk_score=risk.risk_score,
+            risk_level=risk.risk_level,
+            region=incident.region,
+            event_type=incident.event_type,
+            cause=incident.cause,
+        )
+
+        alert = AlertResponse(
+            send_alert=alert_result.send_alert,
+            priority=alert_result.priority,
+            channel=alert_result.channel,
+            audience=alert_result.audience,
+            message=alert_result.message,
+        )
+
+        replay_doc = ReplayDocument(
+            doc_id=doc.doc_id,
+            timestamp=doc.timestamp.isoformat(),
+            text=doc.text,
+            source=doc.source,
+            metadata=doc.metadata,
+        )
+
+        decisions.append(ReplayDecision(document=replay_doc, incident=incident, risk=risk, alert=alert))
+
+    return ReplayNextResponse(consumed_count=len(decisions), decisions=decisions)

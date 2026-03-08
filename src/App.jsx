@@ -7,7 +7,16 @@ import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
 import NaturalDisasterFeed from './components/NaturalDisasterFeed'
 import SectorAlerts from './components/SectorAlerts'
-import { analyzeIncident, healthCheck, refreshDataset, fetchDisasterEvents, suggestResponse } from './api/backend'
+import {
+  analyzeIncident,
+  healthCheck,
+  refreshDataset,
+  fetchDisasterEvents,
+  suggestResponse,
+  getReplayStatus,
+  consumeReplayNext,
+  resetReplayCursor,
+} from './api/backend'
 import {
   regions,
   stressScoreHistory,
@@ -143,12 +152,30 @@ function App() {
   const [suggestionLoading, setSuggestionLoading] = useState(false)
   const [suggestionError, setSuggestionError] = useState('')
   const [latestSuggestion, setLatestSuggestion] = useState(null)
+  const [replayStatus, setReplayStatus] = useState(null)
+  const [replayDecisions, setReplayDecisions] = useState([])
+  const [replayLoading, setReplayLoading] = useState(false)
+  const [replayError, setReplayError] = useState('')
+  const [replayMessage, setReplayMessage] = useState('')
 
   useEffect(() => {
     healthCheck()
       .then(() => setBackendConnected(true))
       .catch(() => setBackendConnected(false))
   }, [])
+
+  useEffect(() => {
+    if (!backendConnected) return
+
+    getReplayStatus()
+      .then((status) => {
+        setReplayStatus(status)
+        setReplayError('')
+      })
+      .catch((err) => {
+        setReplayError(err instanceof Error ? err.message : 'Failed to load replay status')
+      })
+  }, [backendConnected])
 
   useEffect(() => {
     const loadLiveOutages = async () => {
@@ -440,6 +467,95 @@ function App() {
     }
   }
 
+  const updateDashboardFromReplayDecisions = (decisions) => {
+    if (!Array.isArray(decisions) || decisions.length === 0) return
+
+    setDashboard((prev) => {
+      const incomingIncidents = decisions.map((entry, idx) => ({
+        id: `replay-${entry.document.doc_id}-${idx}`,
+        timestamp: entry.document.timestamp,
+        text: entry.document.text,
+        eventType: entry.incident.event_type,
+        cause: entry.incident.cause,
+        severity: entry.incident.severity,
+        region: entry.incident.region,
+      }))
+
+      const priorityMap = { P1: 'high', P2: 'high', P3: 'medium', P4: 'low' }
+      const incomingAlerts = decisions
+        .filter((entry) => entry.alert.send_alert)
+        .map((entry) => ({
+          sector: entry.alert.audience.replace(/_/g, ' '),
+          region: entry.incident.region,
+          recommendation: entry.alert.message,
+          priority: priorityMap[entry.alert.priority] || 'medium',
+        }))
+
+      const averageRisk = decisions.reduce((sum, entry) => sum + (Number(entry.risk.risk_score) || 0), 0) / decisions.length
+      const nextScore = blendScore(prev.score, Math.round(averageRisk * 100), 0.5)
+
+      return {
+        ...prev,
+        score: nextScore,
+        incidents: [...incomingIncidents, ...prev.incidents].slice(0, 40),
+        sectorAlerts: [...incomingAlerts, ...prev.sectorAlerts].slice(0, 20),
+      }
+    })
+  }
+
+  const handleReplayStatusRefresh = async () => {
+    setReplayLoading(true)
+    setReplayError('')
+    setReplayMessage('')
+    try {
+      const status = await getReplayStatus()
+      setReplayStatus(status)
+    } catch (err) {
+      setReplayError(err instanceof Error ? err.message : 'Failed to refresh replay status')
+    } finally {
+      setReplayLoading(false)
+    }
+  }
+
+  const handleReplayConsume = async (batchSize) => {
+    setReplayLoading(true)
+    setReplayError('')
+    setReplayMessage('')
+
+    try {
+      const result = await consumeReplayNext(batchSize)
+      const decisions = Array.isArray(result.decisions) ? result.decisions : []
+      setReplayDecisions((prev) => [...decisions, ...prev].slice(0, 25))
+      updateDashboardFromReplayDecisions(decisions)
+
+      const status = await getReplayStatus()
+      setReplayStatus(status)
+      setReplayMessage(`Consumed ${result.consumed_count} replay document(s).`)
+    } catch (err) {
+      setReplayError(err instanceof Error ? err.message : 'Replay consume failed')
+    } finally {
+      setReplayLoading(false)
+    }
+  }
+
+  const handleReplayReset = async () => {
+    setReplayLoading(true)
+    setReplayError('')
+    setReplayMessage('')
+
+    try {
+      await resetReplayCursor()
+      const status = await getReplayStatus()
+      setReplayStatus(status)
+      setReplayDecisions([])
+      setReplayMessage('Replay cursor reset to start of feed.')
+    } catch (err) {
+      setReplayError(err instanceof Error ? err.message : 'Replay reset failed')
+    } finally {
+      setReplayLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-grid-dark text-slate-100">
       {/* Header */}
@@ -567,6 +683,105 @@ function App() {
                 ) : null}
               </div>
             ) : null}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-grid-border bg-grid-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                Official Feed Replay
+              </h3>
+              <span className="text-xs text-slate-400">
+                {replayStatus ? `source: ${replayStatus.source}` : 'source: unknown'}
+              </span>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Pending Docs</p>
+                <p className="mt-1 text-lg font-semibold text-cyan-300">{replayStatus?.pending_documents ?? '-'}</p>
+              </div>
+              <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Total Docs</p>
+                <p className="mt-1 text-lg font-semibold text-slate-200">{replayStatus?.total_documents ?? '-'}</p>
+              </div>
+              <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Last Cursor</p>
+                <p className="mt-1 text-xs text-slate-300 break-all">
+                  {replayStatus?.consumed_doc_id || 'Not consumed yet'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Next Timestamp</p>
+                <p className="mt-1 text-xs text-slate-300 break-all">
+                  {replayStatus?.next_timestamp || 'No pending documents'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReplayStatusRefresh}
+                disabled={!backendConnected || replayLoading}
+                className="rounded-md border border-slate-500/50 bg-slate-700/30 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700/50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {replayLoading ? 'Working...' : 'Refresh Status'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReplayConsume(1)}
+                disabled={!backendConnected || replayLoading}
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Consume Next 1
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReplayConsume(5)}
+                disabled={!backendConnected || replayLoading}
+                className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Consume Next 5
+              </button>
+              <button
+                type="button"
+                onClick={handleReplayReset}
+                disabled={!backendConnected || replayLoading}
+                className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Reset Replay
+              </button>
+            </div>
+
+            {replayMessage ? <p className="mt-3 text-xs text-cyan-300">{replayMessage}</p> : null}
+            {replayError ? <p className="mt-3 text-xs text-amber-400">{replayError}</p> : null}
+
+            <div className="mt-4">
+              <p className="text-xs uppercase tracking-wider text-slate-500">Latest Replay Decisions</p>
+              {replayDecisions.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">Consume replay documents to view scored decisions here.</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {replayDecisions.slice(0, 8).map((entry, index) => (
+                    <li key={`${entry.document.doc_id}-${index}`} className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded bg-slate-700/60 px-2 py-0.5 text-xs text-slate-300">
+                          {entry.document.timestamp}
+                        </span>
+                        <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300">
+                          risk {Math.round((Number(entry.risk.risk_score) || 0) * 100)} ({entry.risk.risk_level})
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 break-all">doc_id: {entry.document.doc_id}</p>
+                      <p className="mt-1 text-sm text-slate-200 break-words">{entry.document.text}</p>
+                      <p className="mt-2 text-xs text-slate-400">
+                        decision: {entry.alert.send_alert ? `${entry.alert.priority} alert via ${entry.alert.channel}` : 'no alert'}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
 

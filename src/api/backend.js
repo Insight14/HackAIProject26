@@ -46,3 +46,29 @@ export async function suggestResponse(payload) {
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
+
+export async function getReplayStatus() {
+  const res = await fetch(`${API_BASE}/feed/replay/status`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function consumeReplayNext(batchSize = 1) {
+  const res = await fetch(`${API_BASE}/feed/replay/next`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batch_size: batchSize }),
+  })
+
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+
+export async function resetReplayCursor() {
+  const res = await fetch(`${API_BASE}/feed/replay/reset`, {
+    method: 'POST',
+  })
+
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
