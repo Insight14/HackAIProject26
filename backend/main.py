@@ -9,12 +9,18 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from alert_router import decide_alert
 from disaster_events import get_active_disaster_events
 from incident_parser import parse_incident_text
+from gemini_recommender import suggest_response_actions
 from risk_engine import score_incident_risk
+
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 app = FastAPI(title="Incident NLP Parser", version="1.0.0")
@@ -107,6 +113,38 @@ class DisasterEventResponse(BaseModel):
     description: str
 
 
+class SuggestionAction(BaseModel):
+    priority: str
+    owner: str
+    timeframe: str
+    action: str
+
+
+class SuggestResponseRequest(BaseModel):
+    scenario_type: Literal["power_outage", "natural_disaster", "incident"] = "incident"
+    title: str = Field(..., min_length=4, description="Short scenario title")
+    description: str = Field(..., min_length=8, description="Detailed scenario description")
+    region: str = Field(..., min_length=2)
+    severity: str = Field(default="medium", min_length=3)
+    affected_customers: int | None = Field(default=None, ge=0)
+
+
+class SuggestResponseResponse(BaseModel):
+    provider: str
+    used_fallback: bool
+    model: str
+    scenario_type: str
+    region: str
+    severity: str
+    title: str
+    description: str
+    assessment: str
+    actions: list[SuggestionAction]
+    public_message: str
+    confidence: float
+    fallback_reason: str | None = None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -116,6 +154,20 @@ def health() -> dict[str, str]:
 def disaster_events() -> list[DisasterEventResponse]:
     events = get_active_disaster_events()
     return [DisasterEventResponse(**event) for event in events]
+
+
+@app.post("/suggest_response", response_model=SuggestResponseResponse)
+def suggest_response(payload: SuggestResponseRequest) -> SuggestResponseResponse:
+    suggestion = suggest_response_actions(
+        scenario_type=payload.scenario_type,
+        title=payload.title,
+        description=payload.description,
+        region=payload.region,
+        severity=payload.severity,
+        affected_customers=payload.affected_customers,
+    )
+
+    return SuggestResponseResponse(**suggestion)
 
 
 @app.post("/analyze_incident", response_model=IncidentResponse)

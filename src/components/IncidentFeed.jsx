@@ -12,12 +12,12 @@ function IncidentFeed({ incidents }) {
   };
 
   return (
-    <div className="rounded-xl border border-grid-border bg-grid-card p-6">
+    <div className="h-[22rem] rounded-xl border border-grid-border bg-grid-card p-6">
       <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
         Recent Incident Reports
       </h3>
       <p className="mt-1 text-xs text-slate-500">Blended from outage telemetry, NLP inputs, and NOAA/FIRMS disaster feeds</p>
-      <ul className="mt-4 space-y-4 max-h-64 overflow-y-auto">
+      <ul className="mt-4 h-64 space-y-4 overflow-y-auto">
         {incidents.map((inc) => (
           <li key={inc.id} className="border-b border-grid-border pb-4 last:border-0 last:pb-0">
             <div className="flex items-start justify-between gap-2">

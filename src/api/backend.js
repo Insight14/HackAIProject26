@@ -35,3 +35,14 @@ export async function fetchDisasterEvents() {
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
+
+export async function suggestResponse(payload) {
+  const res = await fetch(`${API_BASE}/suggest_response`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}

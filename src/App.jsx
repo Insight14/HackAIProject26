@@ -7,7 +7,7 @@ import IncidentFeed from './components/IncidentFeed'
 import IncidentInput from './components/IncidentInput'
 import NaturalDisasterFeed from './components/NaturalDisasterFeed'
 import SectorAlerts from './components/SectorAlerts'
-import { analyzeIncident, healthCheck, refreshDataset, fetchDisasterEvents } from './api/backend'
+import { analyzeIncident, healthCheck, refreshDataset, fetchDisasterEvents, suggestResponse } from './api/backend'
 import {
   regions,
   stressScoreHistory,
@@ -89,7 +89,8 @@ const severityFromMeters = (meters) => {
 
 const scoreFromMeters = (meters) => {
   if (meters <= 0) return 0
-  return Math.min(100, Math.round(Math.log10(1 + meters) * 32))
+  // Softer scaling prevents ODIN aggregate totals from being pinned at 100.
+  return Math.min(100, Math.round(Math.log10(1 + meters) * 12))
 }
 
 const toIsoOrNow = (value) => {
@@ -111,15 +112,26 @@ const normalizeSeverity = (value) => {
   return 'medium'
 }
 
+const blendScore = (previousScore, incomingScore, incomingWeight = 0.5) => {
+  const prev = Number.isFinite(previousScore) ? previousScore : 0
+  const next = Number.isFinite(incomingScore) ? incomingScore : 0
+  const weight = Math.min(1, Math.max(0, incomingWeight))
+
+  if (prev <= 0) return Math.round(next)
+
+  const blended = (prev * (1 - weight)) + (next * weight)
+  return Math.max(0, Math.min(100, Math.round(blended)))
+}
+
 function App() {
   const [dashboard, setDashboard] = useState({
-    score: 78,
-    regions,
-    stressScoreHistory,
-    riskFactors,
-    incidents,
+    score: 0,
+    regions: [],
+    stressScoreHistory: [],
+    riskFactors: [],
+    incidents: [],
     disasterIncidents: [],
-    sectorAlerts,
+    sectorAlerts: [],
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -128,6 +140,9 @@ function App() {
   const [backendConnected, setBackendConnected] = useState(false)
   const [csvRefreshLoading, setCsvRefreshLoading] = useState(false)
   const [csvRefreshMessage, setCsvRefreshMessage] = useState('')
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [suggestionError, setSuggestionError] = useState('')
+  const [latestSuggestion, setLatestSuggestion] = useState(null)
 
   useEffect(() => {
     healthCheck()
@@ -304,14 +319,20 @@ function App() {
           })
         }
 
-        setDashboard({
-          score,
-          regions: regionsLive.length ? regionsLive : regions,
-          stressScoreHistory: stressLive.length ? stressLive : stressScoreHistory,
-          riskFactors: factorsLive,
-          incidents: incidentsLive,
-          disasterIncidents,
-          sectorAlerts: alertsLive,
+        setDashboard((prev) => {
+          const nlpIncidents = prev.incidents.filter((inc) => String(inc.id).startsWith('nlp-'))
+          const mergedIncidents = [...nlpIncidents, ...incidentsLive].slice(0, 30)
+
+          return {
+            // Live telemetry should steer score strongly while still smoothing jumps.
+            score: blendScore(prev.score, score, 0.65),
+            regions: regionsLive.length ? regionsLive : regions,
+            stressScoreHistory: stressLive.length ? stressLive : stressScoreHistory,
+            riskFactors: factorsLive,
+            incidents: mergedIncidents,
+            disasterIncidents,
+            sectorAlerts: alertsLive,
+          }
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load live outage data')
@@ -335,9 +356,30 @@ function App() {
   const handleAnalyzeIncident = async (text) => {
     setNlpLoading(true)
     setNlpError('')
+    setSuggestionError('')
     try {
       const result = await analyzeIncident(text)
       const { incident, risk, alert } = result
+
+      const naturalCauses = ['storm', 'wildfire', 'heatwave', 'hurricane', 'tornado', 'flood']
+      const scenarioType = naturalCauses.some((term) => incident.cause?.toLowerCase().includes(term))
+        ? 'natural_disaster'
+        : 'power_outage'
+
+      setSuggestionLoading(true)
+      suggestResponse({
+        scenario_type: scenarioType,
+        title: `${incident.event_type} in ${incident.region}`,
+        description: text,
+        region: incident.region,
+        severity: incident.severity,
+      })
+        .then((suggestion) => setLatestSuggestion(suggestion))
+        .catch((err) => {
+          console.error('Suggestion request failed:', err)
+          setSuggestionError(err instanceof Error ? err.message : 'Failed to generate suggestions')
+        })
+        .finally(() => setSuggestionLoading(false))
 
       const newIncident = {
         id: `nlp-${Date.now()}`,
@@ -351,7 +393,8 @@ function App() {
 
       setDashboard((prev) => {
         const score100 = Math.round(risk.risk_score * 100)
-        const newScore = score100 > prev.score ? score100 : prev.score
+          // NLP updates nudge score without permanently pinning it at the max.
+          const newScore = blendScore(prev.score, score100, 0.35)
 
         let newAlerts = prev.sectorAlerts
         if (alert.send_alert) {
@@ -461,12 +504,70 @@ function App() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* NLP incident input */}
         <div className="mb-6">
-          <IncidentInput onAnalyze={handleAnalyzeIncident} loading={nlpLoading} />
+          <IncidentInput onAnalyze={handleAnalyzeIncident} loading={nlpLoading || loading} />
           {nlpError && (
             <p className="mt-2 text-sm text-amber-400">
               {nlpError} — Start the backend with: <code className="rounded bg-slate-700 px-1">cd backend && uvicorn main:app --reload</code>
             </p>
           )}
+
+          <div className="mt-4 rounded-xl border border-grid-border bg-grid-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+                AI Response Suggestions
+              </h3>
+              {latestSuggestion ? (
+                <span className="text-xs text-slate-400">
+                  source: {latestSuggestion.provider}{latestSuggestion.used_fallback ? ' (fallback)' : ''}
+                </span>
+              ) : null}
+            </div>
+
+            {suggestionLoading ? (
+              <p className="mt-3 text-sm text-cyan-400">Generating recommendations...</p>
+            ) : null}
+
+            {suggestionError ? (
+              <p className="mt-3 text-sm text-amber-400">{suggestionError}</p>
+            ) : null}
+
+            {!suggestionLoading && !latestSuggestion && !suggestionError ? (
+              <p className="mt-3 text-sm text-slate-500">
+                Analyze an incident above to generate response recommendations here.
+              </p>
+            ) : null}
+
+            {latestSuggestion ? (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Analyzed input</p>
+                  <p className="mt-1 text-sm italic leading-relaxed text-slate-300 whitespace-normal break-words">
+                    "{latestSuggestion.description}"
+                  </p>
+                </div>
+
+                <p className="text-sm leading-relaxed text-slate-300 whitespace-normal break-words">
+                  {latestSuggestion.assessment}
+                </p>
+                <ul className="space-y-2">
+                  {(latestSuggestion.actions || []).map((item, index) => (
+                    <li key={`${item.owner}-${index}`} className="rounded-lg border border-grid-border bg-slate-800/40 p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300">{item.priority}</span>
+                        <span className="text-xs text-slate-400">{item.owner} • {item.timeframe}</span>
+                      </div>
+                      <p className="text-sm text-slate-200">{item.action}</p>
+                    </li>
+                  ))}
+                </ul>
+                {latestSuggestion.public_message ? (
+                  <p className="rounded border border-grid-border bg-slate-900/40 p-2 text-xs text-slate-400">
+                    Public message: {latestSuggestion.public_message}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* Top row: Risk score + Explanation */}
@@ -484,13 +585,16 @@ function App() {
           <RegionCards regions={dashboard.regions} />
         </div>
 
-        {/* Chart + Incident feed + Sector alerts */}
+        {/* Chart + Incident feed */}
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <StressChart data={dashboard.stressScoreHistory} />
           </div>
-          <div className="space-y-6">
+          <div>
             <IncidentFeed incidents={dashboard.incidents} />
+          </div>
+
+          <div className="lg:col-span-3">
             <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
           </div>
         </div>
