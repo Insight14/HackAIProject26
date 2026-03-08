@@ -132,6 +132,18 @@ const blendScore = (previousScore, incomingScore, incomingWeight = 0.5) => {
   return Math.max(0, Math.min(100, Math.round(blended)))
 }
 
+const PLAYBOOK_PHASES = [
+  { key: '0_15_min', label: '0-15 min' },
+  { key: '15_60_min', label: '15-60 min' },
+  { key: '60_240_min', label: '60-240 min' },
+]
+
+const confidencePercent = (value) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return 0
+  return Math.max(0, Math.min(100, Math.round(num * 100)))
+}
+
 function App() {
   const [dashboard, setDashboard] = useState({
     score: 0,
@@ -665,17 +677,70 @@ function App() {
                 <p className="text-sm leading-relaxed text-slate-300 whitespace-normal break-words">
                   {latestSuggestion.assessment}
                 </p>
-                <ul className="space-y-2">
-                  {(latestSuggestion.actions || []).map((item, index) => (
-                    <li key={`${item.owner}-${index}`} className="rounded-lg border border-grid-border bg-slate-800/40 p-3">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300">{item.priority}</span>
-                        <span className="text-xs text-slate-400">{item.owner} • {item.timeframe}</span>
-                      </div>
-                      <p className="text-sm text-slate-200">{item.action}</p>
-                    </li>
-                  ))}
-                </ul>
+
+                <div className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Decision playbook</p>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                    {PLAYBOOK_PHASES.map((phase) => {
+                      const phaseSteps = latestSuggestion.playbook?.[phase.key] || []
+                      return (
+                        <div key={phase.key} className="rounded-lg border border-grid-border bg-slate-800/40 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">{phase.label}</p>
+                          {phaseSteps.length === 0 ? (
+                            <p className="mt-2 text-xs text-slate-500">No steps provided for this window.</p>
+                          ) : (
+                            <ul className="mt-2 space-y-2">
+                              {phaseSteps.map((step, idx) => (
+                                <li key={`${phase.key}-${step.owner}-${idx}`} className="rounded border border-grid-border bg-slate-900/50 p-2">
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300">{step.priority}</span>
+                                    <span className="text-xs text-slate-400">{step.owner}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-200">{step.action}</p>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded border border-grid-border bg-slate-900/40 p-3">
+                    <p className="text-xs uppercase tracking-wider text-slate-500">Model confidence</p>
+                    <p className="mt-1 text-sm font-semibold text-cyan-300">{confidencePercent(latestSuggestion.confidence)}%</p>
+                  </div>
+                  <div className="rounded border border-grid-border bg-slate-900/40 p-3">
+                    <p className="text-xs uppercase tracking-wider text-slate-500">Evidence</p>
+                    {Array.isArray(latestSuggestion.evidence) && latestSuggestion.evidence.length > 0 ? (
+                      <ul className="mt-1 space-y-1">
+                        {latestSuggestion.evidence.slice(0, 4).map((item, index) => (
+                          <li key={`${item}-${index}`} className="text-xs text-slate-300">- {item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-xs text-slate-500">No explicit evidence provided.</p>
+                    )}
+                  </div>
+                </div>
+
+                <details className="rounded-lg border border-grid-border bg-slate-900/40 p-3">
+                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-400">Raw action list</summary>
+                  <ul className="mt-2 space-y-2">
+                    {(latestSuggestion.actions || []).map((item, index) => (
+                      <li key={`${item.owner}-${index}`} className="rounded-lg border border-grid-border bg-slate-800/40 p-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="rounded bg-cyan-500/20 px-2 py-0.5 text-xs font-semibold text-cyan-300">{item.priority}</span>
+                          <span className="text-xs text-slate-400">{item.owner} • {item.timeframe}</span>
+                        </div>
+                        <p className="text-sm text-slate-200">{item.action}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+
                 {latestSuggestion.public_message ? (
                   <p className="rounded border border-grid-border bg-slate-900/40 p-2 text-xs text-slate-400">
                     Public message: {latestSuggestion.public_message}

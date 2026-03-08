@@ -125,6 +125,18 @@ class SuggestionAction(BaseModel):
     action: str
 
 
+class PlaybookStep(BaseModel):
+    priority: str
+    owner: str
+    action: str
+
+
+class SuggestionPlaybook(BaseModel):
+    phase_0_15_min: list[PlaybookStep] = Field(default_factory=list, alias="0_15_min")
+    phase_15_60_min: list[PlaybookStep] = Field(default_factory=list, alias="15_60_min")
+    phase_60_240_min: list[PlaybookStep] = Field(default_factory=list, alias="60_240_min")
+
+
 class SuggestResponseRequest(BaseModel):
     scenario_type: Literal["power_outage", "natural_disaster", "incident"] = "incident"
     title: str = Field(..., min_length=4, description="Short scenario title")
@@ -145,6 +157,8 @@ class SuggestResponseResponse(BaseModel):
     description: str
     assessment: str
     actions: list[SuggestionAction]
+    playbook: SuggestionPlaybook | None = None
+    evidence: list[str] = Field(default_factory=list)
     public_message: str
     confidence: float
     fallback_reason: str | None = None

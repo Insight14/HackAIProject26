@@ -66,6 +66,9 @@ def suggest_response_actions(
         if not isinstance(parsed, dict):
             raise ValueError("Gemini response was not a JSON object")
 
+        actions = parsed.get("actions", [])
+        playbook = _build_operational_playbook(actions)
+
         return {
             "provider": "gemini",
             "used_fallback": False,
@@ -76,7 +79,13 @@ def suggest_response_actions(
             "title": title,
             "description": description,
             "assessment": str(parsed.get("assessment", "")),
-            "actions": parsed.get("actions", []),
+            "actions": actions,
+            "playbook": playbook,
+            "evidence": [
+                f"Scenario: {scenario_type}",
+                f"Region: {region}",
+                f"Severity: {severity}",
+            ],
             "public_message": str(parsed.get("public_message", "")),
             "confidence": float(parsed.get("confidence", 0.7)),
         }
@@ -162,6 +171,51 @@ def _extract_json(text: str) -> Any:
     return json.loads(cleaned)
 
 
+def _build_operational_playbook(actions: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
+    phases = {
+        "0_15_min": [],
+        "15_60_min": [],
+        "60_240_min": [],
+    }
+
+    for item in actions:
+        if not isinstance(item, dict):
+            continue
+
+        timeframe = str(item.get("timeframe", "")).lower()
+        step = {
+            "priority": str(item.get("priority", "P2")),
+            "owner": str(item.get("owner", "Operations")),
+            "action": str(item.get("action", "Review incident response procedures.")),
+        }
+
+        if "0-15" in timeframe or "immediate" in timeframe:
+            phases["0_15_min"].append(step)
+        elif "15-60" in timeframe or "15-45" in timeframe or "30-60" in timeframe:
+            phases["15_60_min"].append(step)
+        else:
+            phases["60_240_min"].append(step)
+
+    # Ensure each phase has at least one actionable step.
+    if not phases["0_15_min"] and actions:
+        phases["0_15_min"].append(_coerce_first_action(actions, default_owner="Grid Operations"))
+    if not phases["15_60_min"] and actions:
+        phases["15_60_min"].append(_coerce_first_action(actions, default_owner="Field Dispatch"))
+    if not phases["60_240_min"] and actions:
+        phases["60_240_min"].append(_coerce_first_action(actions, default_owner="Public Information"))
+
+    return phases
+
+
+def _coerce_first_action(actions: list[dict[str, Any]], default_owner: str) -> dict[str, str]:
+    first = next((a for a in actions if isinstance(a, dict)), {})
+    return {
+        "priority": str(first.get("priority", "P2")),
+        "owner": str(first.get("owner", default_owner)),
+        "action": str(first.get("action", "Maintain operational coordination and publish updates.")),
+    }
+
+
 def _fallback_suggestion(
     *,
     scenario_type: str,
@@ -223,6 +277,35 @@ def _fallback_suggestion(
             }
         )
 
+    playbook = {
+        "0_15_min": [
+            {
+                "priority": "P1" if high else "P2",
+                "owner": "Incident Commander",
+                "action": f"Stand up command bridge and verify immediate impact in {region}.",
+            }
+        ],
+        "15_60_min": [
+            {
+                "priority": "P1" if high else "P2",
+                "owner": "Field Dispatch",
+                "action": "Deploy crews, validate safe routes, and report restoration blockers.",
+            },
+            {
+                "priority": "P2",
+                "owner": "Critical Infrastructure Liaison",
+                "action": "Check backup-power status with hospitals, telecom, and water utilities.",
+            },
+        ],
+        "60_240_min": [
+            {
+                "priority": "P2",
+                "owner": "Public Information",
+                "action": "Publish restoration ETA bands and a fixed next update cadence.",
+            }
+        ],
+    }
+
     return {
         "provider": "fallback",
         "used_fallback": True,
@@ -237,6 +320,12 @@ def _fallback_suggestion(
             "Recommended actions prioritize stabilization, crew safety, and critical-service continuity."
         ),
         "actions": base_actions,
+        "playbook": playbook,
+        "evidence": [
+            f"Scenario: {scenario_type}",
+            f"Severity: {severity}",
+            f"Affected customers estimate: {customers}",
+        ],
         "public_message": (
             f"Utility response is active for {region}. Crews are assessing impact and coordinating restoration steps."
         ),
