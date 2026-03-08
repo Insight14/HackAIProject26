@@ -489,10 +489,14 @@ function App() {
           <div className="lg:col-span-2">
             <StressChart data={dashboard.stressScoreHistory} />
           </div>
-          <div className="space-y-6">
+          <div>
             <IncidentFeed incidents={dashboard.incidents} />
-            <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
           </div>
+        </div>
+
+        {/* Natural disaster feed - full width */}
+        <div className="mt-6">
+          <NaturalDisasterFeed incidents={dashboard.disasterIncidents} />
         </div>
 
         {/* Sector alerts - full width */}
